@@ -17,8 +17,9 @@ import english from "retext-english";
 import indefiniteArticle from "retext-indefinite-article";
 import minify from "rehype-preset-minify";
 import slug from "rehype-slug";
+import crossPostRmd from "./crossPostRmd.mjs";
 
-const processor = unified()
+const mdprocessor = unified()
   .use(markdown)
   .use(toc)
   .use(remark2retext, unified().use(english).use(indefiniteArticle))
@@ -45,8 +46,12 @@ fs.watch(srcPath, { persistent: true }, function (event, filename) {
     const srcFile = filename;
     const namFile = srcFile.split(".")[0];
     const dstFile = namFile + ".json";
+    const altFile = namFile + ".html";
+    const hstFile = namFile + ".hast";
 
-    processor.process(
+    console.log(altFile);
+
+    mdprocessor.process(
       toVFile.readSync(srcPath + srcFile, "utf8"),
       function (error, file) {
         if (error) throw error;
@@ -56,12 +61,22 @@ fs.watch(srcPath, { persistent: true }, function (event, filename) {
         file.data.frontmatter.dateModified = date;
 
         // Apend the article-body to the frontmatter object
-        file.data.frontmatter["articleBody"] = file.contents;
+        if (file.contents === "") {
+          // Run crossPostRmd
+          const text = crossPostRmd(srcPath + altFile, srcPath + hstFile);
+          // Assign the cross post body to the articleBody
+          file.data.frontmatter["articleBody"] = text;
+        } else {
+          // Assign the Markdown body to the articleBody
+          file.data.frontmatter["articleBody"] = file.contents;
+        }
+
         let pstObj = JSON.stringify(file.data.frontmatter, null, 2);
         let article = pstObj.replace(
           // slugify the article-body headers for toc
           /href=#/gm,
-          "href=" + pstSlug + namFile + "/#"
+          "href=" + pstSlug + namFile + "#"
+          // "href=\\\"javascript: scrollTo('#"
         );
 
         fs.writeFileSync(dstPath + dstFile, article);
